@@ -58,12 +58,10 @@ class Db():
         if self.debug:
         
             if not(table_name):
-                print("Debes especificar el nombre de la tabla.")
-                return False
+                raise Exception("Debes especificar el nombre de la tabla.")
             
             elif table_name not in self.list_table_names():
-                print(f"no existe {table_name} o esta mal escrito.")
-                return False
+                raise Exception(f"no existe {table_name} o esta mal escrito.")
             
             if params:
                 
@@ -81,14 +79,25 @@ class Db():
                         
                 elif type(params) is dict:
                     is_columns_incorrect = [name for name in params.keys() if name not in columns_name]
-                    
+                    query = f"SELECT * FROM {table_name} WHERE "
+                    for key, value in params.items():
+                        if type(value) is str:
+                            value = f"'{value}'"
+                        else:
+                            value = f"{value}"
+
+                        query += f"{key}={value} AND "
+
+                    query = query[:-5] 
+                    print("query>>>", query)
+                    text = self.__execute(query=query, Return=False) 
+                    print(text)                   
                 else:
-                    print("params solo acepta valores de tipo list, tuple y dict.")
+                    raise Exception("params solo acepta valores de tipo list, tuple y dict.")
                 
                 if len(is_columns_incorrect):
-                    
-                    print(f"{' '.join(is_columns_incorrect)} no existen o estan mal escrito.")
-                    return False
+                    raise Exception(f"Campos {' '.join(is_columns_incorrect)} no existen o estan mal escrito.")
+                
                 
                 return True
             
@@ -99,10 +108,10 @@ class Db():
     
     
     #3 falta revisar
-    def execute(self, query : Union[str, list, tuple], test: bool = False) -> Union[dict, list, tuple, bool]:
+    def __execute(self, query:Union[str, list, tuple], Return:bool =False, test: bool = False) -> Union[dict, list, tuple, bool]:
         """
         funcion para poder ejecutar cualquier query
-        o para verificar que este bien escrito.
+        O para verificar que este bien escrito.
         """
         
         type_query: str = type(query)
@@ -279,13 +288,13 @@ class Db():
                     print("solo se puede ingresar tuples, arrays o strings en el parametro de query.")
                     return False
     
-    
+
     def list_table_names(self, schema:str="public") -> list:
         """
         lista los nombre de las columnas que hay en la db
         """
         query:str= f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{schema}' ORDER BY table_name;"
-        consultation: tuple = self.execute(query=query)
+        consultation: tuple = self.__execute(query=query)
         
         if len(consultation):
             return [result[0] for result in consultation]
@@ -305,7 +314,7 @@ class Db():
             return
         
         query:str= f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}' ORDER BY ordinal_position;"
-        consultation:tuple= self.execute(query=query)
+        consultation:tuple= self.__execute(query=query)
         
         if len(consultation):
             return [result[0] for result in consultation]
@@ -366,8 +375,8 @@ class Db():
                         print(f"{' '.join(is_columns_incorrect)} no existen o estan mal escrito.")
                         return False
         
-        # ajuztamos el array y si no lo creamos y ajuztamos, para asi ingresarlo en las columnas
-        # que queremos que nos devuelva el select
+        # ajustamos el array y si no lo creamos y ajustamos, para asi ingresarlo en las columnas
+        # que queremos que nos devuelva el select|
         if columns_name:
             str_search:str= ",".join(columns_name)
         else:
@@ -381,7 +390,7 @@ class Db():
         if not(params):
 
             query: str = f"SELECT {str_search} FROM {table_name}"
-            data: tuple = self.execute(query=query)
+            data: tuple = self.__execute(query=query)
             
             list_data: list = []
             
@@ -419,7 +428,7 @@ class Db():
                     value = f"{value}"
                 
                 query:str= f"SELECT {str_search} FROM {table_name} WHERE {key}={value}"
-                data:tuple= self.execute(query=query)
+                data:tuple= self.__execute(query=query)
                 
                 list_data:list= []
                 
@@ -461,7 +470,7 @@ class Db():
                 value = f"{value}"
             
             query:str= f"SELECT {str_search} FROM {table_name} WHERE {key}={value}"
-            data:tuple= self.execute(query=query)
+            data:tuple= self.__execute(query=query)
             
             list_data:list= []
             
@@ -515,7 +524,7 @@ class Db():
                 values = ', '.join(values)
                 
                 query:str= f"INSERT INTO {table_name}({columns_name}) VALUES({values});"
-                self.execute(query=query)
+                self.__execute(query=query)
                 
         elif type_params is dict:
             
@@ -532,7 +541,7 @@ class Db():
             values = ', '.join(values)
             
             query:str= f"INSERT INTO {table_name}({columns_name}) VALUES({values});"
-            self.execute(query=query)
+            self.__execute(query=query)
             
         else:
             print("el tipo de dato ingresado no es valido debe ser un array un un dict")
@@ -583,7 +592,7 @@ class Db():
                 else:
                     query = f"UPDATE {table_name} SET {assignments} WHERE {search_column} = {param[search_column]}"
                 
-                self.execute(query=query)
+                self.__execute(query=query)
             
         if type(params) is dict:
             
@@ -607,38 +616,54 @@ class Db():
             else:
                 query = f"UPDATE {table_name} SET {assignments} WHERE {search_column} = {params[search_column]}"
             
-            self.execute(query=query)
+            self.__execute(query=query)
     
     #3 Falta por revisar
     # falta hacer que se pueda realizar busquedas por varios parametros y no solo por uno solo con el operador OR o AND
-    def delete(self, table_name: str = None, params:Union[list, dict, tuple] = None) -> None:
+    def delete(self, table_name: str = None, field_name:str = None, value:Union[str, int] = None) -> None:
         
+        """delete
+
+        Args:
+            table_name (str): nombre de la tabla
+            field_name (str): nombre del campo en la tabla
+            value (str): valor con el que se encuentra almacenado
         """
-        Metodo para eliminar determinadas filas de una tabla
-        """
+        
         if self.debug:
+            #validamos que todos los paramétros
+            #vengan con data
+            if not table_name:
+                raise Exception("El table_name no puede estar vacío")
+            if not field_name and not value:
+                raise Exception("El field_name y el value no puede estar vacío")
+            if not field_name:
+                raise Exception("El field_name no puede estar vacío")
+            if not value:
+                raise Exception("El value no puede estar vacío")
             
-            if not(self.debug_validation(table_name=table_name, params=params)):
-                return
-            
-            columns_name:list = self.list_column_names(table_name)
-        
-            # comprobamos que que las columnas del params esten bien escritas
-            if type(params) is dict:
-                is_columns_incorrect = [name for name in params.keys() if name not in columns_name]
-                
-            elif type(params) is list:
-                
-                for param in params:
-                    
-                    for name in param.keys():
-                        
-                        if name not in columns_name:
-                            is_columns_incorrect.append(name)
-            else:
-                print("para hacer uso del atributo de tipo list o dict, no se le puede ingresar de otro tipo.")
-                return False
-            
-            if len(is_columns_incorrect):
-                    print(f"{' '.join(is_columns_incorrect)} no existen o estan mal escrito.")
-                    return False
+            if self.__validate_field_name(table_name=table_name, field_name=field_name):
+                #Construir params para validar 
+                params={field_name: value}
+                if not(self.debug_validation(table_name=table_name, params=params)):
+                    return 
+                query:str= f"DELETE FROM {table_name} WHERE {field_name} = {value};"
+                self.__execute(query=query, Return=False)
+
+
+    def __validate_field_name(self, table_name:str, field_name:str):
+        """__validate_field_name
+
+        Args:
+            table_name (str): nombre de la tabla
+            field_name (str): nombre del campo en la tabla
+
+        Returns:
+            boolean: si el campo esta dentro de la tabla
+        """
+        columns_name:list= self.list_column_names(table_name)
+        print(columns_name)
+        if field_name in columns_name:
+            return True
+        else:
+            raise Exception("El field_name no pertenece a esta tabla")
